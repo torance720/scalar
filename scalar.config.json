@@ -746,8 +746,8 @@
           "to": "/blog/posts/2024-09-01-oss-pledge"
         },
         {
-          "from": "/resources/blog",
-          "to": "/blog"
+          "from": "/blog",
+          "to": "/resources/blog"
         },
         {
           "from": "/changelog",
@@ -955,7 +955,7 @@
             "type": "link",
             "title": "Blog",
             "icon": "phosphor/regular/newspaper",
-            "to": "/blog"
+            "to": "/resources/blog"
           },
           {
             "type": "link",
@@ -4653,7 +4653,7 @@
               ]
             }
           },
-          "/blog": {
+          "blog": {
             "type": "page",
             "title": "Blog",
             "icon": "phosphor/regular/newspaper",
