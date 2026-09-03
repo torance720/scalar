@@ -206,10 +206,24 @@ export function dirname(path: string): string {
 
 export function basename(path: string, ext?: string): string {
   let f = splitPath(path)![2] as string
-  // TODO: make this comparison case-insensitive on windows?
-  if (ext && f.slice(-ext.length) === ext) {
-    f = f.slice(0, -ext.length)
+  if (!ext) return f
+
+  // If running on Windows, perform a case-insensitive comparison for the extension.
+  // Guard against environments without `process` (e.g., browsers).
+  const isWindows = typeof process !== 'undefined' && (process.platform === 'win32' || process.env.OS?.toLowerCase()?.includes('windows'))
+
+  if (isWindows) {
+    const lowerF = f.toLowerCase()
+    const lowerExt = ext.toLowerCase()
+    if (lowerExt && lowerF.slice(-lowerExt.length) === lowerExt) {
+      f = f.slice(0, -lowerExt.length)
+    }
+  } else {
+    if (ext && f.slice(-ext.length) === ext) {
+      f = f.slice(0, -ext.length)
+    }
   }
+
   return f
 }
 
