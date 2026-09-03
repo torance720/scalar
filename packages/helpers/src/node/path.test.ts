@@ -85,6 +85,16 @@ describe('path utilities', () => {
       expect(basename('/foo/bar/baz.txt', '.txt')).toBe('baz')
       expect(basename('baz.txt', '.txt')).toBe('baz')
     })
+
+    it('handles case-insensitive extension match on Windows and case-sensitive elsewhere', () => {
+      const isWindows = typeof process !== 'undefined' && (process.platform === 'win32' || process.env.OS?.toLowerCase()?.includes('windows'))
+      const result = basename('file.TS', '.ts')
+      if (isWindows) {
+        expect(result).toBe('file')
+      } else {
+        expect(result).toBe('file.TS')
+      }
+    })
   })
 
   describe('extname', () => {
