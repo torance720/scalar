@@ -1,3 +1,4 @@
+import { Script, createContext } from 'vm'
 import type { HandlerContext } from './build-handler-context'
 
 /**
@@ -8,28 +9,34 @@ type HandlerExecutionResult = {
 }
 
 /**
- * Execute handler code in a sandboxed environment.
- * The code has access only to the provided context (store, faker, req, res).
+ * Execute handler code in a sandboxed VM context.
+ * The code is executed as an async IIFE with only the provided context
+ * exposed in the sandbox. This avoids using the Function constructor.
  */
 export async function executeHandler(code: string, context: HandlerContext): Promise<HandlerExecutionResult> {
-  // Create a function that executes the handler code with the context
-  // Using Function constructor to create a sandboxed environment
-  // The code is wrapped in a function body that returns the result
-  const handlerFunction = new Function(
-    'store',
-    'faker',
-    'req',
-    'res',
-    `
-    ${code}
-  `,
-  )
-  const result = handlerFunction(context.store, context.faker, context.req, context.res)
+  const wrapped = `(async (store, faker, req, res) => { \n${code}\n})(store, faker, req, res)`
 
-  // If the result is a Promise, await it
-  if (result instanceof Promise) {
-    return { result: await result }
+  const sandbox: Record<string, unknown> = {
+    store: context.store,
+    faker: context.faker,
+    req: context.req,
+    res: context.res,
   }
 
-  return { result }
+  const vmContext = createContext(Object.create(null)) as any
+  Object.assign(vmContext, sandbox)
+
+  const script = new Script(wrapped, { filename: 'execute-handler.vm.js' })
+
+  try {
+    const result = script.runInContext(vmContext, { timeout: 1000 })
+
+    if (result instanceof Promise) {
+      return { result: await result }
+    }
+
+    return { result }
+  } catch (error) {
+    throw error
+  }
 }
