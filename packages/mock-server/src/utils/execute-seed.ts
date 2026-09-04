@@ -1,3 +1,4 @@
+import { Script, createContext } from 'vm'
 import type { SeedContext } from './build-seed-context'
 
 /**
@@ -8,35 +9,36 @@ type SeedExecutionResult = {
 }
 
 /**
- * Execute seed code in a sandboxed environment.
- * The code has access only to the provided context (store, faker, seed, schema).
+ * Execute seed code in a sandboxed VM context.
+ * The code is executed as an async IIFE with only the provided context
+ * exposed in the sandbox. This avoids using the Function constructor.
  */
 export async function executeSeed(code: string, context: SeedContext): Promise<SeedExecutionResult> {
-  // Create a function that executes the seed code with the context
-  // Using Function constructor to create a sandboxed environment
-  // The code is wrapped in a function body that returns the result
-  const seedFunction = new Function(
-    'store',
-    'faker',
-    'seed',
-    'schema',
-    `
-    ${code}
-  `,
-  )
+  const wrapped = `(async (store, faker, seed, schema) => { \n${code}\n})(store, faker, seed, schema)`
 
-  // Execute the seed function with the context
+  const sandbox: Record<string, unknown> = {
+    store: context.store,
+    faker: context.faker,
+    seed: context.seed,
+    schema: context.schema,
+  }
+
+  // Create an isolated VM context with a null prototype to reduce prototype pollution
+  const vmContext = createContext(Object.create(null)) as any
+  Object.assign(vmContext, sandbox)
+
+  const script = new Script(wrapped, { filename: 'execute-seed.vm.js' })
+
   try {
-    const result = seedFunction(context.store, context.faker, context.seed, context.schema)
+    const result = script.runInContext(vmContext, { timeout: 1000 })
 
-    // If the result is a Promise, await it
     if (result instanceof Promise) {
       return { result: await result }
     }
 
     return { result }
   } catch (error) {
-    // Re-throw to be caught by the caller
+    // Bubble up errors to the caller for logging/handling
     throw error
   }
 }
