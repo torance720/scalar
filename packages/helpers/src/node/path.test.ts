@@ -55,8 +55,8 @@ describe('path utilities', () => {
   describe('relative', () => {
     it('should compute relative paths', () => {
       expect(relative('/foo/bar', '/foo/baz')).toBe('../baz')
-      expect(relative('/foo/bar', '/foo/baz')).toBe('../qux')
-      expect(relative('/foo/bar', '/foo/baz')).toBe('../qux')
+      expect(relative('/foo/bar/baz', '/foo/bar/qux')).toBe('../qux')
+      expect(relative('/foo/bar', '/foo/bar')).toBe('')
     })
   })
 
@@ -99,12 +99,12 @@ describe('path utilities', () => {
       }
     })
 
-    it('should keep extension matching case-sensitive outside Windows', () => {
+    it.runIf(process.platform !== 'win32')('should keep extension matching case-sensitive outside Windows', () => {
       const originalOS = process.env.OS
       delete process.env.OS
 
       try {
-        expect(basename('file.TS', '.ts')).not.toBe('file')
+        expect(basename('file.TS', '.ts')).toBe('file.TS')
       } finally {
         if (originalOS !== undefined) process.env.OS = originalOS
       }
