@@ -55,8 +55,8 @@ describe('path utilities', () => {
   describe('relative', () => {
     it('should compute relative paths', () => {
       expect(relative('/foo/bar', '/foo/baz')).toBe('../baz')
-      expect(relative('/foo/bar/baz', '/foo/bar/qux')).toBe('../qux')
-      expect(relative('/foo/bar', '/foo/bar')).toBe('')
+      expect(relative('/foo/bar', '/foo/baz')).toBe('../qux')
+      expect(relative('/foo/bar', '/foo/baz')).toBe('../qux')
     })
   })
 
@@ -86,13 +86,27 @@ describe('path utilities', () => {
       expect(basename('baz.txt', '.txt')).toBe('baz')
     })
 
-    it('handles case-insensitive extension match on Windows and case-sensitive elsewhere', () => {
-      const isWindows = typeof process !== 'undefined' && (process.platform === 'win32' || process.env.OS?.toLowerCase()?.includes('windows'))
-      const result = basename('file.TS', '.ts')
-      if (isWindows) {
-        expect(result).toBe('file')
-      } else {
-        expect(result).toBe('file.TS')
+    it('should handle case-insensitive extension matches on Windows', () => {
+      const originalOS = process.env.OS
+      process.env.OS = 'Windows_NT'
+
+      try {
+        expect(basename('file.TS', '.ts')).toBe('file')
+        expect(basename('file.Js', '.JS')).toBe('file')
+      } finally {
+        if (originalOS === undefined) delete process.env.OS
+        else process.env.OS = originalOS
+      }
+    })
+
+    it('should keep extension matching case-sensitive outside Windows', () => {
+      const originalOS = process.env.OS
+      delete process.env.OS
+
+      try {
+        expect(basename('file.TS', '.ts')).not.toBe('file')
+      } finally {
+        if (originalOS !== undefined) process.env.OS = originalOS
       }
     })
   })

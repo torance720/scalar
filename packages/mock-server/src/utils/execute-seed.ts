@@ -1,5 +1,5 @@
-import { Script, createContext } from 'vm'
 import type { SeedContext } from './build-seed-context'
+import { runInSandbox } from './sandbox'
 
 /**
  * Result of executing a seed handler.
@@ -9,36 +9,19 @@ type SeedExecutionResult = {
 }
 
 /**
- * Execute seed code in a sandboxed VM context.
- * The code is executed as an async IIFE with only the provided context
- * exposed in the sandbox. This avoids using the Function constructor.
+ * Execute seed code inside the QuickJS sandbox.
+ *
+ * The seed code can only reach the `store` and `faker` bridges and the `seed`
+ * helper, which persists generated items through the store. It cannot touch the
+ * host runtime.
  */
 export async function executeSeed(code: string, context: SeedContext): Promise<SeedExecutionResult> {
-  const wrapped = `(async (store, faker, seed, schema) => { \n${code}\n})(store, faker, seed, schema)`
-
-  const sandbox: Record<string, unknown> = {
+  const result = await runInSandbox({
+    code,
     store: context.store,
-    faker: context.faker,
-    seed: context.seed,
-    schema: context.schema,
-  }
+    jsonGlobals: { schema: context.schema },
+    includeSeed: true,
+  })
 
-  // Create an isolated VM context with a null prototype to reduce prototype pollution
-  const vmContext = createContext(Object.create(null)) as any
-  Object.assign(vmContext, sandbox)
-
-  const script = new Script(wrapped, { filename: 'execute-seed.vm.js' })
-
-  try {
-    const result = script.runInContext(vmContext, { timeout: 1000 })
-
-    if (result instanceof Promise) {
-      return { result: await result }
-    }
-
-    return { result }
-  } catch (error) {
-    // Bubble up errors to the caller for logging/handling
-    throw error
-  }
+  return { result }
 }

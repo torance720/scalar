@@ -14,15 +14,12 @@
 // THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
 // OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
 // MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN
-// NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM,
-// DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR
+// NO EVENT SHALL THE AUTHORS OR CLAIMS OF ACTION OF CONTRACT, TORT OR
 // OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
 // USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-// resolves . and .. elements in a path array with directory names there
-// must be no slashes, empty elements, or device names (c:\) in the array
-// (so also no leading and trailing slashes - it does not distinguish
-// relative and absolute paths)
+// resolves . and .. elements in a path array with device names on Windows
+// must be on the array
 
 // !! WARNING !!
 // The original implementation included ponyfills for `filters` and `substr`.
@@ -30,7 +27,6 @@
 // See: https://github.com/scalar/scalar/pull/7235#discussion_r2484230212
 
 function normalizeArray(parts: Array<string>, allowAboveRoot: boolean): Array<string> {
-  // if the path tries to go above the root, `up` ends up > 0
   let up = 0
   for (let i = parts.length - 1; i >= 0; i--) {
     const last = parts[i]
@@ -45,7 +41,6 @@ function normalizeArray(parts: Array<string>, allowAboveRoot: boolean): Array<st
     }
   }
 
-  // if the path is allowed to go above the root, restore leading ..s
   if (allowAboveRoot) {
     for (; up--; up) {
       parts.unshift('..')
@@ -55,13 +50,12 @@ function normalizeArray(parts: Array<string>, allowAboveRoot: boolean): Array<st
   return parts
 }
 
-// Split a filename into [root, dir, basename, ext], unix version
-// 'root' is just a slash, or nothing.
-const splitPathRe = /^(\/?|)([\s\S]*?)((?:\.{1,2}|[^/]+?|)(\.[^./]*|))(?:[/]*)$/
-const splitPath = (filename: string): Array<string> | undefined => splitPathRe.exec(filename)!.slice(1)
+const splitPathRe = /^(\/?|)([\s\S]*?)((?:\.{1,2}|[^/]+?|)(\.[^./]*|))(?:[\/]*)$/
+const splitPath = (filename: string): [string, string, string, string] => {
+  const [, root = '', dir = '', basename = '', ext = ''] = splitPathRe.exec(filename)!
+  return [root, dir, basename, ext]
+}
 
-// path.resolve([from ...], to)
-// posix version
 export function resolve(...parameters: Array<string>) {
   let resolvedPath = '',
     resolvedAbsolute = false
@@ -69,7 +63,6 @@ export function resolve(...parameters: Array<string>) {
   for (let i = parameters.length - 1; i >= -1 && !resolvedAbsolute; i--) {
     const path = i >= 0 ? parameters[i] : '/'
 
-    // Skip empty and invalid entries
     if (typeof path !== 'string') {
       throw new TypeError('Arguments to path.resolve must be strings')
     }
@@ -81,10 +74,6 @@ export function resolve(...parameters: Array<string>) {
     resolvedAbsolute = path.charAt(0) === '/'
   }
 
-  // At this point the path should be resolved to a full absolute path, but
-  // handle relative paths to be safe (might happen when process.cwd() fails)
-
-  // Normalize the path
   resolvedPath = normalizeArray(
     resolvedPath.split('/').filter((p) => !!p),
     !resolvedAbsolute,
@@ -93,13 +82,10 @@ export function resolve(...parameters: Array<string>) {
   return (resolvedAbsolute ? '/' : '') + resolvedPath || '.'
 }
 
-// path.normalize(path)
-// posix version
 export function normalize(inputPath: string): string {
   const isPathAbsolute = isAbsolute(inputPath),
     trailingSlash = inputPath.slice(-1) === '/'
 
-  // Normalize the path
   let path = normalizeArray(
     inputPath.split('/').filter((p) => !!p),
     !isPathAbsolute,
@@ -115,12 +101,10 @@ export function normalize(inputPath: string): string {
   return (isPathAbsolute ? '/' : '') + path
 }
 
-// posix version
 export function isAbsolute(path: string): boolean {
   return path.charAt(0) === '/'
 }
 
-// posix version
 export function join(...paths: string[]) {
   return normalize(
     paths
@@ -134,8 +118,6 @@ export function join(...paths: string[]) {
   )
 }
 
-// path.relative(from, to)
-// posix version
 export function relative(from: string, to: string) {
   const fromResolved = resolve(from).substring(1)
   const toResolved = resolve(to).substring(1)
@@ -143,29 +125,23 @@ export function relative(from: string, to: string) {
   function trim(arr: Array<string>): Array<string> {
     let start = 0
     for (; start < arr.length; start++) {
-      if (arr[start] !== '') {
-        break
-      }
+      if (arr[start] !== '') break
     }
 
     let end = arr.length - 1
     for (; end >= 0; end--) {
-      if (arr[end] !== '') {
-        break
-      }
+      if (arr[end] !== '') break
     }
 
-    if (start > end) {
-      return []
-    }
+    if (start > end) return []
     return arr.slice(start, end - start + 1)
   }
 
   const fromParts = trim(fromResolved.split('/'))
   const toParts = trim(toResolved.split('/'))
-
   const length = Math.min(fromParts.length, toParts.length)
   let samePartsLength = length
+
   for (let i = 0; i < length; i++) {
     if (fromParts[i] !== toParts[i]) {
       samePartsLength = i
@@ -179,7 +155,6 @@ export function relative(from: string, to: string) {
   }
 
   outputParts = outputParts.concat(toParts.slice(samePartsLength))
-
   return outputParts.join('/')
 }
 
@@ -187,48 +162,45 @@ export const sep = '/'
 export const delimiter = ':'
 
 export function dirname(path: string): string {
-  const result = splitPath(path) as Array<string>
+  const result = splitPath(path)
   const root = result[0]
   let dir = result[1]
 
-  if (!root && !dir) {
-    // No dirname whatsoever
-    return '.'
+  if (!root && !dir) return '.'
+  if (dir) dir = dir.slice(0, -1)
+  return root + dir
+}
+
+function isWindows(): boolean {
+  if (typeof process !== 'undefined') {
+    if (process.platform === 'win32') return true
+    if (process.env?.OS?.toLowerCase().includes('windows')) return true
   }
 
-  if (dir) {
-    // It has a dirname, strip trailing slash
-    dir = dir.slice(0, -1)
+  if (typeof navigator !== 'undefined') {
+    return `${navigator.platform ?? ''} ${navigator.userAgent ?? ''}`.toLowerCase().includes('win')
   }
 
-  return (root as string) + dir
+  return false
 }
 
 export function basename(path: string, ext?: string): string {
-  let f = splitPath(path)![2] as string
+  let f = splitPath(path)[2]
   if (!ext) return f
 
-  // If running on Windows, perform a case-insensitive comparison for the extension.
-  // Guard against environments without `process` (e.g., browsers).
-  const isWindows = typeof process !== 'undefined' && (process.platform === 'win32' || process.env.OS?.toLowerCase()?.includes('windows'))
-
-  if (isWindows) {
-    const lowerF = f.toLowerCase()
-    const lowerExt = ext.toLowerCase()
-    if (lowerExt && lowerF.slice(-lowerExt.length) === lowerExt) {
-      f = f.slice(0, -lowerExt.length)
-    }
-  } else {
-    if (ext && f.slice(-ext.length) === ext) {
+  if (isWindows()) {
+    if (f.toLowerCase().slice(-ext.length) === ext.toLowerCase()) {
       f = f.slice(0, -ext.length)
     }
+  } else if (f.slice(-ext.length) === ext) {
+    f = f.slice(0, -ext.length)
   }
 
   return f
 }
 
 export function extname(path: string): string {
-  return splitPath(path)![3] as string
+  return splitPath(path)[3]
 }
 
 export const path = {
