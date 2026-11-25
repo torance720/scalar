@@ -11,6 +11,9 @@ type SandboxOptions = {
 export async function runInSandbox({ code, store, jsonGlobals = {}, includeSeed = false }: SandboxOptions) {
   const { faker } = await import('@faker-js/faker')
   const bridge = (kind: 'store' | 'faker', path: string[], args: string) => {
+    if (path.some((part) => ['__proto__', 'prototype', 'constructor'].includes(part))) {
+      throw new Error('Unsupported sandbox bridge path')
+    }
     const root: any = kind === 'store' ? store : faker
     const parts = kind === 'store' ? path : path.slice(0, -1)
     const key = kind === 'store' ? path[0] : path.at(-1)
